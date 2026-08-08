@@ -38,7 +38,7 @@ zeroize = { version = "1.8", features = ["zeroize_derive", "alloc", "std"] }
 secrecy = { version = "0.8", features = ["serde"] }
 rand = "0.8"
 getrandom = "0.2"
-hmac = "0.12"
+hmac = "0.13"
 sha2 = "0.10"
 subtle = "2.6"
 totp-lite = "2.0"
