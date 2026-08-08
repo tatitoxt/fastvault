@@ -6,6 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(unix)]
 use tokio::net::UnixListener;
 use tokio::sync::RwLock;
 use zeroize::Zeroize;
@@ -48,75 +49,82 @@ impl AgentServer {
     }
 
     pub async fn run(&self) -> Result<()> {
-        if self.socket_path.exists() {
-            let _ = fs::remove_file(&self.socket_path);
-        }
-
-        if let Some(parent) = self.socket_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let listener = UnixListener::bind(&self.socket_path)?;
-
         #[cfg(unix)]
         {
+            if self.socket_path.exists() {
+                let _ = fs::remove_file(&self.socket_path);
+            }
+
+            if let Some(parent) = self.socket_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            let listener = UnixListener::bind(&self.socket_path)?;
+
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs::metadata(&self.socket_path)?.permissions();
             perms.set_mode(0o600);
             fs::set_permissions(&self.socket_path, perms)?;
-        }
 
-        let state_clone = self.state.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                let mut state = state_clone.write().await;
-                if let Some(expires_at) = state.expires_at {
-                    if Utc::now() > expires_at {
-                        if let Some(ref mut dek) = state.cached_dek {
-                            dek.zeroize();
+            let state_clone = self.state.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    let mut state = state_clone.write().await;
+                    if let Some(expires_at) = state.expires_at {
+                        if Utc::now() > expires_at {
+                            if let Some(ref mut dek) = state.cached_dek {
+                                dek.zeroize();
+                            }
+                            state.cached_dek = None;
+                            state.expires_at = None;
                         }
-                        state.cached_dek = None;
-                        state.expires_at = None;
                     }
                 }
-            }
-        });
+            });
 
-        loop {
-            let (mut socket, _) = listener.accept().await?;
-            let state = self.state.clone();
-            let store = self.store.clone();
+            loop {
+                let (mut socket, _) = listener.accept().await?;
+                let state = self.state.clone();
+                let store = self.store.clone();
 
-            tokio::spawn(async move {
-                let mut len_buf = [0u8; 4];
-                if socket.read_exact(&mut len_buf).await.is_err() {
-                    return;
-                }
-                let len = u32::from_be_bytes(len_buf) as usize;
-                let mut buf = vec![0u8; len];
-                if socket.read_exact(&mut buf).await.is_err() {
-                    return;
-                }
-
-                let req: AgentRequest = match serde_json::from_slice(&buf) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        let resp = AgentResponse::Error(e.to_string());
-                        let resp_bytes = serde_json::to_vec(&resp).unwrap();
-                        let resp_len = (resp_bytes.len() as u32).to_be_bytes();
-                        let _ = socket.write_all(&resp_len).await;
-                        let _ = socket.write_all(&resp_bytes).await;
+                tokio::spawn(async move {
+                    let mut len_buf = [0u8; 4];
+                    if socket.read_exact(&mut len_buf).await.is_err() {
                         return;
                     }
-                };
+                    let len = u32::from_be_bytes(len_buf) as usize;
+                    let mut buf = vec![0u8; len];
+                    if socket.read_exact(&mut buf).await.is_err() {
+                        return;
+                    }
 
-                let response = Self::handle_request(req, state, store).await;
-                let resp_bytes = serde_json::to_vec(&response).unwrap();
-                let resp_len = (resp_bytes.len() as u32).to_be_bytes();
-                let _ = socket.write_all(&resp_len).await;
-                let _ = socket.write_all(&resp_bytes).await;
-            });
+                    let req: AgentRequest = match serde_json::from_slice(&buf) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let resp = AgentResponse::Error(e.to_string());
+                            let resp_bytes = serde_json::to_vec(&resp).unwrap();
+                            let resp_len = (resp_bytes.len() as u32).to_be_bytes();
+                            let _ = socket.write_all(&resp_len).await;
+                            let _ = socket.write_all(&resp_bytes).await;
+                            return;
+                        }
+                    };
+
+                    let response = Self::handle_request(req, state, store).await;
+                    let resp_bytes = serde_json::to_vec(&response).unwrap();
+                    let resp_len = (resp_bytes.len() as u32).to_be_bytes();
+                    let _ = socket.write_all(&resp_len).await;
+                    let _ = socket.write_all(&resp_bytes).await;
+                });
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            Err(FastVaultError::AgentSessionError(
+                "Agent IPC is not supported on non-Unix operating systems".to_string(),
+            ))
         }
     }
 
