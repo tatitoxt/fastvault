@@ -8,9 +8,21 @@
 
 ---
 
+## 💡 Origin & Inspiration
+
+FastVault was born out of a recurring frustration in modern software engineering: **managing local development secrets without scattering plaintext `.env` files across developer disks, risking accidental Git commits of API tokens, or mandating cloud accounts just to run local code.**
+
+Most existing secret solutions fall into two extreme categories:
+1. **Plaintext `.env` Files**: Highly convenient, but inherently unsafe — easily exposed to local disk inspection, unencrypted backups, and accidental `git push` leaks.
+2. **Heavy Cloud SaaS Vaults**: Enterprise cloud services that require mandatory internet connectivity, subscription accounts, remote telemetry, and slow network roundtrips for offline development workflows.
+
+**FastVault was created to solve this fundamental tradeoff:** a local-first, offline-by-default secrets management system written in Rust that provides zero-plaintext process environment injection (`fastvault run`), robust key-wrapping cryptography, and terminal-native ergonomics expected from modern systems engineering tools (`cargo`, `gh`, `sops`).
+
+---
+
 ## 🔒 Why FastVault?
 
-FastVault is built for developers and engineering teams who want the speed, ergonomics, and safety of modern Rust tools (`cargo`, `gh`, `sops`) without relying on mandatory cloud services, plaintext files, or proprietary browser extensions.
+FastVault is built for developers and engineering teams who want the speed, ergonomics, and safety of modern Rust tools without relying on mandatory cloud services, plaintext files, or proprietary browser extensions.
 
 ### Core Highlights
 - **⚡ Blazing Fast**: Cold unlock in under 50ms; sub-millisecond cached secret access via local agent IPC.
