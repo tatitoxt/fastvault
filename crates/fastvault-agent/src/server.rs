@@ -191,6 +191,7 @@ mod tests {
     use crate::client::AgentClient;
     use fastvault_crypto::KdfParams;
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_agent_ipc_lifecycle() {
         let dir = tempfile::tempdir().unwrap();
