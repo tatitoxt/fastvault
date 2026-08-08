@@ -1,0 +1,24 @@
+[package]
+name = "fastvault-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+fastvault-core.workspace = true
+fastvault-crypto.workspace = true
+fastvault-store.workspace = true
+fastvault-audit.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+zeroize.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
