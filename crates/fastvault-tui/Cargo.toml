@@ -1,0 +1,14 @@
+[package]
+name = "fastvault-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+fastvault-core.workspace = true
+fastvault-crypto.workspace = true
+fastvault-store.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+thiserror.workspace = true

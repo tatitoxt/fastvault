@@ -1,0 +1,24 @@
+# Rust / Cargo output
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local FastVault state during testing
+.fastvault/
+*.fvb
+*.fvt
