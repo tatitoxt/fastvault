@@ -15,13 +15,15 @@ cargo run -p fastvault-cli -- --help
 
 ## Compilar y probar
 
-Para conocer más comandos, ejecutá:
+Ejecutá la suite del workspace desde la raíz:
 
 ```bash
-cargo run -p fastvault-cli -- --help
+cargo test --workspace
 ```
 
-El código usa Argon2id para derivación de claves y AES-256-GCM para cifrado. El repositorio todavía no incluye pruebas automatizadas. FastVault está en desarrollo y no cuenta con una auditoría de seguridad independiente; no lo uses como único resguardo de credenciales críticas.
+Las pruebas cubren, entre otras cosas, el ciclo de vida del vault, el cambio de contraseña, el almacenamiento local, el agente y la verificación de la cadena de auditoría. Para ver los comandos disponibles en la CLI, ejecutá `cargo run -p fastvault-cli -- --help`.
+
+El código usa Argon2id para derivación de claves y AES-256-GCM para cifrado. FastVault está en desarrollo y no cuenta con una auditoría de seguridad independiente; no lo uses como único resguardo de credenciales críticas.
 
 ## Documentación
 
