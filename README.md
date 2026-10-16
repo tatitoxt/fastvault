@@ -2,6 +2,12 @@
 
 FastVault es una CLI en Rust para guardar secretos cifrados localmente y entregarlos a procesos sin escribirlos en un archivo `.env`. El repositorio está organizado como un workspace con CLI, núcleo, agente local y registro de auditoría.
 
+```bash
+git clone https://github.com/tatitoxt/fastvault.git && cd fastvault
+cargo build --workspace
+cargo run -p fastvault-cli -- --help
+```
+
 ## Requisitos
 
 - Rust y Cargo
@@ -9,13 +15,7 @@ FastVault es una CLI en Rust para guardar secretos cifrados localmente y entrega
 
 ## Compilar y probar
 
-```bash
-git clone https://github.com/tatitoxt/fastvault.git
-cd fastvault
-cargo build --workspace
-```
-
-Para ver los comandos disponibles, ejecutá:
+Para conocer más comandos, ejecutá:
 
 ```bash
 cargo run -p fastvault-cli -- --help
