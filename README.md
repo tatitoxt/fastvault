@@ -13,7 +13,6 @@ FastVault es una CLI en Rust para guardar secretos cifrados localmente y entrega
 git clone https://github.com/tatitoxt/fastvault.git
 cd fastvault
 cargo build --workspace
-cargo test --workspace
 ```
 
 Para ver los comandos disponibles, ejecutá:
@@ -22,7 +21,7 @@ Para ver los comandos disponibles, ejecutá:
 cargo run -p fastvault-cli -- --help
 ```
 
-El código usa Argon2id para derivación de claves y AES-256-GCM para cifrado. FastVault está en desarrollo y no cuenta con una auditoría de seguridad independiente; no lo uses como único resguardo de credenciales críticas.
+El código usa Argon2id para derivación de claves y AES-256-GCM para cifrado. El repositorio todavía no incluye pruebas automatizadas. FastVault está en desarrollo y no cuenta con una auditoría de seguridad independiente; no lo uses como único resguardo de credenciales críticas.
 
 ## Documentación
 
