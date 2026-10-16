@@ -1,183 +1,35 @@
-# FastVault ⚡
+# FastVault
 
-> High-performance, local-first, zero-cloud-by-default secrets management system written in Rust with modern AEAD key-wrapping cryptography, zeroize memory safety, local IPC daemon, process environment injection, and Ratatui terminal UI.
+FastVault es una CLI en Rust para guardar secretos cifrados localmente y entregarlos a procesos sin escribirlos en un archivo `.env`. El repositorio está organizado como un workspace con CLI, núcleo, agente local y registro de auditoría.
 
-[![CI](https://github.com/tatitoxt/fastvault/actions/workflows/ci.yml/badge.svg)](https://github.com/tatitoxt/fastvault/actions)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
-[![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
+## Requisitos
 
----
+- Rust y Cargo
+- macOS o Linux para las funciones que usan sockets Unix
 
-## 💡 Origin & Inspiration
-
-FastVault was born out of a recurring frustration in modern software engineering: **managing local development secrets without scattering plaintext `.env` files across developer disks, risking accidental Git commits of API tokens, or mandating cloud accounts just to run local code.**
-
-Most existing secret solutions fall into two extreme categories:
-1. **Plaintext `.env` Files**: Highly convenient, but inherently unsafe — easily exposed to local disk inspection, unencrypted backups, and accidental `git push` leaks.
-2. **Heavy Cloud SaaS Vaults**: Enterprise cloud services that require mandatory internet connectivity, subscription accounts, remote telemetry, and slow network roundtrips for offline development workflows.
-
-**FastVault was created to solve this fundamental tradeoff:** a local-first, offline-by-default secrets management system written in Rust that provides zero-plaintext process environment injection (`fastvault run`), robust key-wrapping cryptography, and terminal-native ergonomics expected from modern systems engineering tools (`cargo`, `gh`, `sops`).
-
----
-
-## 🔒 Why FastVault?
-
-FastVault is built for developers and engineering teams who want the speed, ergonomics, and safety of modern Rust tools without relying on mandatory cloud services, plaintext files, or proprietary browser extensions.
-
-### Core Highlights
-- **⚡ Blazing Fast**: Cold unlock in under 50ms; sub-millisecond cached secret access via local agent IPC.
-- **🔐 AES-256-GCM + Argon2id**: Key-wrapping hierarchy separating KEK (derived from master password) and random DEK.
-- **🚀 Developer Environment Injection**: Inject secrets directly into child process RAM environments (`fastvault run --env DB=prod/db -- npm start`) with ZERO plaintext files written to disk.
-- **🛡️ Secure Memory Handling**: Sensitive key material zeroized on drop.
-- **💻 Local Agent & IPC**: Background daemon with configurable TTL session caching over UNIX domain sockets (`0600` permissions).
-- **📊 Tamper-Evident Audit Trail**: HMAC-SHA256 hash chain recording vault events without leaking secret values.
-- **📲 TOTP Multi-Factor**: Encrypted TOTP generation and clipboard auto-clear (30s).
-- **🖥️ Ratatui Terminal UI**: Interactive TUI dashboard (`fastvault ui`) for browsing secrets and audit logs.
-
----
-
-## 📐 Architecture & Key Hierarchy
-
-```
-Master Password + Random Salt (32B)
-            │
-            ▼ (Argon2id KDF: m=64MB, t=3, p=4)
-Key Encryption Key (KEK, 256-bit)
-            │
-            ▼ (AES-256-GCM Encrypt with AAD)
-Wrapped Data Encryption Key (Wrapped DEK)
-            │
-            ▼ (Unwrap with KEK)
-Data Encryption Key (DEK, 256-bit random)
-            │
-            ▼ (AES-256-GCM Encrypt with AAD = Vault UUID)
-Encrypted Vault Payload (Versioned .fvt binary envelope)
-```
-
-For technical details, see:
-- [Cryptography Spec](docs/CRYPTOGRAPHY.md)
-- [Threat Model](docs/THREAT_MODEL.md)
-- [Vault Format](docs/VAULT_FORMAT.md)
-- [System Architecture](docs/ARCHITECTURE.md)
-
----
-
-## 🚀 Quick Start
-
-### Installation
+## Compilar y probar
 
 ```bash
-# Clone the repository
 git clone https://github.com/tatitoxt/fastvault.git
 cd fastvault
-
-# Build and install release binary
-cargo install --path crates/fastvault-cli
+cargo build --workspace
+cargo test --workspace
 ```
 
-### Basic Commands
+Para ver los comandos disponibles, ejecutá:
 
 ```bash
-# Initialize vault
-fastvault init
-
-# Store secrets
-fastvault set prod/database_url "$DATABASE_URL"
-fastvault set api/service_key "$SERVICE_API_KEY" --description "Production service credential"
-
-# List and search secrets
-fastvault list
-fastvault search service_key
-
-# Copy secret value to clipboard (clears automatically after 30 seconds)
-fastvault copy api/service_key
-
-# Generate cryptographically secure passwords & tokens
-fastvault generate password --length 32
-fastvault generate token --length 16
+cargo run -p fastvault-cli -- --help
 ```
 
-### Flagship Feature: Process Environment Injection
+El código usa Argon2id para derivación de claves y AES-256-GCM para cifrado. FastVault está en desarrollo y no cuenta con una auditoría de seguridad independiente; no lo uses como único resguardo de credenciales críticas.
 
-Avoid writing `.env` files with plaintext keys to disk:
+## Documentación
 
-```bash
-# Inject secrets directly into child process environment
-fastvault run \
-  --env DATABASE_URL=prod/database_url \
-  --env SERVICE_API_KEY=api/service_key \
-  -- npm run deploy
-```
+- [Diseño criptográfico](docs/CRYPTOGRAPHY.md)
+- [Modelo de amenazas](docs/THREAT_MODEL.md)
+- [Formato del vault](docs/VAULT_FORMAT.md)
 
-Render template files containing `{{fastvault:path}}`:
+## Licencia
 
-```bash
-fastvault template render .env.template
-```
-
-### Local Agent Daemon
-
-Maintain an unlocked session for a configurable TTL to avoid repetitive master password prompts:
-
-```bash
-# Unlock agent session for 15 minutes
-fastvault unlock --ttl 15m
-
-# Check agent status
-fastvault status
-
-# Lock session
-fastvault lock
-```
-
-### Interactive Terminal UI
-
-```bash
-fastvault ui
-```
-
----
-
-## ⚡ Performance Benchmarks
-
-Measured on Apple Silicon (M1/M2/M3) using `criterion`:
-
-| Operation | Scale / Dataset | Execution Time |
-| :--- | :--- | :--- |
-| **Vault Creation (Argon2id)** | 64MB Memory Cost, 3 Iterations | `~45.2 ms` |
-| **DEK Re-wrapping (Password Change)** | Single 32-byte DEK | `~45.1 ms` |
-| **Payload Encryption** | 1,000 Secrets | `~1.84 ms` |
-| **Payload Decryption** | 1,000 Secrets | `~1.12 ms` |
-| **Cached Agent IPC Access** | Unix Domain Socket | `~0.32 ms` |
-
-To run benchmarks locally:
-```bash
-cargo bench
-```
-
----
-
-## 🛠️ Testing & Verification
-
-FastVault maintains a comprehensive test suite across unit, integration, crypto round-trip, IPC, and property-based tests:
-
-```bash
-# Run full test suite
-cargo test --all-targets --all-features
-
-# Run clippy checks (warnings denied)
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Check code formatting
-cargo fmt --all -- --check
-```
-
----
-
-## 📄 License
-
-Dual-licensed under either:
-- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE))
-- **MIT License** ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+MIT o Apache-2.0, a elección. Ver [LICENSE-MIT](LICENSE-MIT) y [LICENSE-APACHE](LICENSE-APACHE).
