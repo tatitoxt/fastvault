@@ -131,8 +131,27 @@ pub enum Commands {
         #[command(subcommand)]
         subcommand: AgentCommands,
     },
+    /// Synchronize the vault with a remote directory backend
+    Sync {
+        #[command(subcommand)]
+        subcommand: SyncCommands,
+    },
     /// Launch interactive Ratatui terminal UI
     Ui,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SyncCommands {
+    /// Push the current vault to a sync target directory
+    Push {
+        /// Directory the vault revisions are written to
+        target: PathBuf,
+        /// Push even when the remote has diverged from local
+        #[arg(long)]
+        force: bool,
+    },
+    /// List revisions available on a sync target
+    List { target: PathBuf },
 }
 
 #[derive(Subcommand, Debug)]

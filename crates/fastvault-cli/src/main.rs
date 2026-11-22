@@ -4,7 +4,9 @@ mod commands;
 mod generator;
 
 use clap::Parser;
-use cli::{AgentCommands, BackupCommands, Cli, Commands, TemplateCommands, TotpCommands};
+use cli::{
+    AgentCommands, BackupCommands, Cli, Commands, SyncCommands, TemplateCommands, TotpCommands,
+};
 use clipboard::SecureClipboard;
 use commands::{
     env_run::execute_env_run, prompt_interactive, prompt_password, render_secrets_table,
@@ -21,6 +23,7 @@ use fastvault_core::{
 };
 use fastvault_crypto::{DataEncryptionKey, KdfParams, VersionedVault};
 use fastvault_store::{BackupEngine, TrashBin, VaultStore};
+use fastvault_sync::{LocalBackend, SyncBackend, SyncEngine};
 use fastvault_tui::{run_tui, TuiApp};
 
 #[tokio::main]
@@ -455,6 +458,49 @@ async fn main() -> anyhow::Result<()> {
                 let client = AgentClient::new(AgentClient::default_socket_path()?);
                 let _ = client.send_request(AgentRequest::Lock).await;
                 println!("Stopped agent session.");
+            }
+        },
+
+        Commands::Sync { subcommand } => match subcommand {
+            SyncCommands::Push { target, force } => {
+                if !store.vault_exists() {
+                    eprintln!(
+                        "Error: no vault at {:?} — run `fastvault init` first",
+                        vault_file
+                    );
+                    std::process::exit(1);
+                }
+                let device = std::env::var("HOSTNAME")
+                    .or_else(|_| std::env::var("USER"))
+                    .unwrap_or_else(|_| "fastvault-device".to_string());
+                let sync_store = VaultStore::new(&vault_file, &audit_file);
+                let engine = SyncEngine::new(sync_store, device);
+                let backend = LocalBackend::new(&target);
+                let result = engine.synchronize(&backend, force).await?;
+                if result.pushed {
+                    println!(
+                        "Pushed vault revision {} to {:?}",
+                        result.revision_id, target
+                    );
+                } else {
+                    println!("Already in sync (revision {})", result.revision_id);
+                }
+            }
+            SyncCommands::List { target } => {
+                let backend = LocalBackend::new(&target);
+                let revisions = backend.list_revisions().await?;
+                if revisions.is_empty() {
+                    println!("No revisions on {:?}", target);
+                }
+                for rev in revisions {
+                    println!(
+                        "{} | {} | {} bytes | {}",
+                        rev.revision_id,
+                        rev.device_id,
+                        rev.payload_size,
+                        rev.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
+                }
             }
         },
 

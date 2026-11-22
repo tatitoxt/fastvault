@@ -28,6 +28,11 @@ cargo run -p fastvault-cli -- --help
   event; `fastvault audit --verify` re-verifies the whole chain
 - **Encrypted backups** — `backup create/inspect/restore` round-trips the
   vault through an independently encrypted `.fvbak` file
+- **Directory sync** — `fastvault sync push <dir>` copies the encrypted
+  vault blob to a target directory (a mounted share, an `rsync` source,
+  a git remote) as a content-hashed revision; re-push is a no-op when
+  nothing changed, divergence without `--force` is refused, and
+  `sync list` shows the remote's revision history
 - **Generators** — passwords and hex tokens with length control
 - **TUI** — `fastvault ui` for browsing and editing interactively
 
@@ -49,7 +54,7 @@ storage, the agent, and audit-chain verification — plus an end-to-end
 suite (`crates/fastvault-cli/tests/e2e.rs`) that drives the compiled
 binary against a temporary vault: set/get/list/search/delete/restore,
 password rotation, backup round-trip, `run` env injection, template
-rendering, and audit-chain tamper detection.
+rendering, directory sync, and audit-chain tamper detection.
 
 `FASTVAULT_PASSWORD` supplies the master password non-interactively for
 scripts and CI; `--vault-path` selects the vault file.
@@ -79,8 +84,9 @@ reproduction.
 
 - **No independent security audit.** FastVault is in development — do not
   use it as the only safeguard for critical credentials.
-- **Local only** — no team sharing, sync, or access control beyond the
-  master password.
+- **Local only** — no team sharing or access control beyond the master
+  password. `sync` pushes to plain directories only (no remote server);
+  the S3 backend is a stub.
 - **Agent is Unix-socket based** — macOS/Linux only; Windows uses the
   prompt-per-command path.
 - **`run` injects via environment variables** — visible to the child

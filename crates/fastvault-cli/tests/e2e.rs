@@ -314,3 +314,41 @@ fn passwd_without_new_password_needs_interaction() {
     let out = v.ok(&["status"]);
     assert!(out.contains("Vault Exists: true"));
 }
+
+#[test]
+fn sync_pushes_vault_and_reports_revisions() {
+    let v = Vault::new();
+    init(&v);
+    v.ok(&["set", "api/key", "abc123"]);
+
+    let remote = v.file("remote");
+    let remote_str = remote.to_str().unwrap();
+
+    let out = v.ok(&["sync", "push", remote_str]);
+    assert!(out.contains("Pushed vault revision"), "push: {out}");
+
+    // Second push with no local changes is a no-op.
+    let out = v.ok(&["sync", "push", remote_str]);
+    assert!(out.contains("Already in sync"), "re-push: {out}");
+
+    let out = v.ok(&["sync", "list", remote_str]);
+    assert!(out.contains("bytes"), "list: {out}");
+
+    // A local change produces a new revision.
+    v.ok(&["set", "api/other", "zzz"]);
+    let out = v.ok(&["sync", "push", remote_str]);
+    assert!(
+        out.contains("Pushed vault revision"),
+        "re-push after set: {out}"
+    );
+    let out = v.ok(&["sync", "list", remote_str]);
+    assert_eq!(out.lines().count(), 2, "two revisions expected: {out}");
+}
+
+#[test]
+fn sync_push_without_vault_fails_cleanly() {
+    let v = Vault::new();
+    let remote = v.file("remote");
+    let err = v.fail(&["sync", "push", remote.to_str().unwrap()]);
+    assert!(err.contains("init"), "expected init hint, got: {err}");
+}
