@@ -470,7 +470,7 @@ async fn main() -> anyhow::Result<()> {
                     );
                     std::process::exit(1);
                 }
-                let device = sync_device_id(&vault_file);
+                let device = sync_device_id(&vault_file)?;
                 let sync_store = VaultStore::new(&vault_file, &audit_file);
                 let engine = SyncEngine::new(sync_store, device);
                 let backend = LocalBackend::new(&target);
@@ -515,32 +515,50 @@ async fn main() -> anyhow::Result<()> {
 // Device identity for sync: FASTVAULT_DEVICE_ID > $HOSTNAME > a random id
 // persisted next to the vault. Two machines sharing a username still sync as
 // different devices, so divergent vaults conflict instead of fast-forwarding.
-fn sync_device_id(vault_file: &std::path::Path) -> String {
+fn sync_device_id(vault_file: &std::path::Path) -> anyhow::Result<String> {
     if let Ok(id) = std::env::var("FASTVAULT_DEVICE_ID") {
         if !id.is_empty() {
-            return id;
+            return Ok(id);
         }
     }
     if let Ok(h) = std::env::var("HOSTNAME") {
         if !h.is_empty() {
-            return h;
+            return Ok(h);
         }
     }
+    // Hidden sidecar named after the vault: ".<vault>.device_id" can never be
+    // the vault itself, and we refuse to overwrite content that is not one of
+    // ours — a foreign file or undecodable bytes bail out instead.
+    let name = vault_file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("vault");
     let dir = vault_file
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
-    let id_file = dir.join("device_id");
-    if let Ok(existing) = std::fs::read_to_string(&id_file) {
-        let trimmed = existing.trim();
-        if !trimmed.is_empty() {
-            return trimmed.to_string();
+    let id_file = dir.join(format!(".{name}.device_id"));
+    if id_file.exists() {
+        if let Ok(existing) = std::fs::read_to_string(&id_file) {
+            let trimmed = existing.trim();
+            if is_device_id(trimmed) {
+                return Ok(trimmed.to_string());
+            }
         }
+        anyhow::bail!(
+            "{id_file:?} exists but is not a fastvault device id; refusing to overwrite — set FASTVAULT_DEVICE_ID"
+        );
     }
     let mut bytes = [0u8; 8];
     rand::Rng::fill(&mut rand::thread_rng(), &mut bytes[..]);
     let id = format!("device-{}", hex::encode(bytes));
-    let _ = std::fs::write(&id_file, &id);
-    id
+    std::fs::write(&id_file, &id).map_err(|e| {
+        anyhow::anyhow!("cannot persist device id to {id_file:?}: {e} — set FASTVAULT_DEVICE_ID")
+    })?;
+    Ok(id)
+}
+
+fn is_device_id(s: &str) -> bool {
+    s.len() == 7 + 16 && s.starts_with("device-") && s[7..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 async fn get_unlocked_vault(
