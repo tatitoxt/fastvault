@@ -20,9 +20,10 @@ pub fn execute_env_run(
         cmd.args(&command[1..]);
     }
 
-    // Never leak the master password into the child: FASTVAULT_PASSWORD is
-    // a CLI-side unlock fallback, not a deliverable secret.
+    // Do not inherit FastVault's automation credentials. Explicit --env mappings
+    // below can still pass a stored secret under either name intentionally.
     cmd.env_remove("FASTVAULT_PASSWORD");
+    cmd.env_remove("FASTVAULT_NEW_PASSWORD");
 
     for mapping in env_mappings {
         let parts: Vec<&str> = mapping.splitn(2, '=').collect();

@@ -58,8 +58,17 @@ binary against a temporary vault: set/get/list/search/delete/restore,
 password rotation, backup round-trip, `run` env injection, template
 rendering, directory sync, and audit-chain tamper detection.
 
-`FASTVAULT_PASSWORD` supplies the master password non-interactively for
-scripts and CI; `--vault-path` selects the vault file.
+`FASTVAULT_PASSWORD` supplies the current master password non-interactively
+for scripts and CI; `--vault-path` selects the vault file. For automated
+password rotation, set `FASTVAULT_NEW_PASSWORD` to the replacement password
+before running `fastvault passwd`. If it is unset or empty, the command
+prompts for and confirms the replacement interactively.
+
+These environment variables keep passwords out of command arguments, but
+processes running as the same user may be able to inspect them, and shells may
+record literal assignments in history. `fastvault run` removes inherited
+values of both variables before starting its child process. An explicit
+`--env` mapping can still pass a stored secret under either variable name.
 
 ## Performance
 

@@ -92,12 +92,7 @@ pub enum Commands {
         subcommand: BackupCommands,
     },
     /// Rotate master password or key material
-    Passwd {
-        #[arg(long)]
-        old_password: Option<String>,
-        #[arg(long)]
-        new_password: Option<String>,
-    },
+    Passwd,
     /// Inspect audit trail
     Audit {
         #[arg(long)]

@@ -35,6 +35,16 @@ impl Vault {
         cmd.output().unwrap()
     }
 
+    fn run_with_new_password(&self, args: &[&str], new_password: &str) -> Output {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_fastvault"));
+        cmd.arg("--vault-path")
+            .arg(self.path())
+            .args(args)
+            .env("FASTVAULT_PASSWORD", PASSWORD)
+            .env("FASTVAULT_NEW_PASSWORD", new_password);
+        cmd.output().unwrap()
+    }
+
     fn ok(&self, args: &[&str]) -> String {
         let out = self.run(args);
         assert!(
@@ -147,13 +157,12 @@ fn passwd_rotates_master_password() {
     let v = Vault::new();
     init(&v);
     v.ok(&["set", "svc/key", "value-1"]);
-    v.ok(&[
-        "passwd",
-        "--old-password",
-        PASSWORD,
-        "--new-password",
-        "New-Pass-999!",
-    ]);
+    let out = v.run_with_new_password(&["passwd"], "New-Pass-999!");
+    assert!(
+        out.status.success(),
+        "password rotation failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     // old password no longer opens the vault
     let out = v.run_with_password(&["get", "svc/key", "--reveal"], PASSWORD);
     assert!(!out.status.success());
@@ -290,26 +299,30 @@ fn set_without_value_does_not_store_master_password() {
 }
 
 #[test]
-fn run_child_does_not_inherit_fastvault_password() {
+fn run_child_does_not_inherit_fastvault_passwords() {
     let v = Vault::new();
     init(&v);
-    let out = v.ok(&[
-        "run",
-        "--",
-        "sh",
-        "-c",
-        "if [ -n \"$FASTVAULT_PASSWORD\" ]; then echo LEAKED; else echo CLEAN; fi",
-    ]);
-    assert_eq!(out.trim(), "CLEAN");
+    let out = v.run_with_new_password(
+        &[
+            "run",
+            "--",
+            "sh",
+            "-c",
+            "if [ -n \"$FASTVAULT_PASSWORD$FASTVAULT_NEW_PASSWORD\" ]; then echo LEAKED; else echo CLEAN; fi",
+        ],
+        "New-Pass-999!",
+    );
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "CLEAN");
 }
 
 #[test]
 fn passwd_without_new_password_needs_interaction() {
-    // FASTVAULT_PASSWORD authenticates, but the NEW password must come from
-    // --new-password or an interactive prompt — not silently reuse the env.
+    // FASTVAULT_PASSWORD authenticates, but rotation needs
+    // FASTVAULT_NEW_PASSWORD or an interactive prompt.
     let v = Vault::new();
     init(&v);
-    v.fail(&["passwd", "--old-password", PASSWORD]);
+    v.fail(&["passwd"]);
     // The old password still works (no no-op "rotation" happened).
     let out = v.ok(&["status"]);
     assert!(out.contains("Vault Exists: true"));

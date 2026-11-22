@@ -301,20 +301,16 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Passwd {
-            old_password,
-            new_password,
-        } => {
-            let old_pwd = match old_password {
-                Some(p) => p,
-                None => prompt_password("Enter current Master Password")?,
-            };
+        Commands::Passwd => {
+            let old_pwd = prompt_password("Enter current Master Password")?;
+            // Read automation credentials from the environment, not argv,
+            // where process listings and shell history can expose them.
+            let new_password = std::env::var("FASTVAULT_NEW_PASSWORD")
+                .ok()
+                .filter(|password| !password.is_empty());
             let non_interactive = new_password.is_some();
             let new_pwd = match new_password {
-                Some(p) => p,
-                // The new password must not come from FASTVAULT_PASSWORD —
-                // that env var holds the *current* master password, and
-                // rotating to it silently would be a no-op.
+                Some(password) => password,
                 None => prompt_interactive("Enter new Master Password")?,
             };
             let confirm = if non_interactive {
