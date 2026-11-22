@@ -526,7 +526,9 @@ fn sync_device_id(vault_file: &std::path::Path) -> String {
             return h;
         }
     }
-    let dir = vault_file.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let dir = vault_file
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
     let id_file = dir.join("device_id");
     if let Ok(existing) = std::fs::read_to_string(&id_file) {
         let trimmed = existing.trim();
