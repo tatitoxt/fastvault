@@ -94,7 +94,11 @@ impl VaultStore {
         let serialized = bincode::serialize(vault)
             .map_err(|e| FastVaultError::SerializationError(e.to_string()))?;
 
-        let parent = self.vault_path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self
+            .vault_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
         let mut temp_file = NamedTempFile::new_in(parent)?;
 
         temp_file.write_all(&serialized)?;
@@ -120,7 +124,11 @@ impl VaultStore {
     pub fn save_vault_blob(&self, data: &[u8]) -> Result<()> {
         self.ensure_directory_permissions()?;
 
-        let parent = self.vault_path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self
+            .vault_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
         let mut temp_file = NamedTempFile::new_in(parent)?;
 
         temp_file.write_all(data)?;
@@ -159,7 +167,11 @@ impl VaultStore {
         let serialized = serde_json::to_string_pretty(audit_log)
             .map_err(|e| FastVaultError::SerializationError(e.to_string()))?;
 
-        let parent = self.audit_path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self
+            .audit_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
         let mut temp_file = NamedTempFile::new_in(parent)?;
 
         temp_file.write_all(serialized.as_bytes())?;
@@ -180,7 +192,13 @@ impl VaultStore {
     }
 
     fn ensure_directory_permissions(&self) -> Result<()> {
-        if let Some(parent) = self.vault_path.parent() {
+        // A bare filename (`--vault-path vault.fvt`) has an empty parent
+        // path — there is nothing to create or chmod.
+        if let Some(parent) = self
+            .vault_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+        {
             if !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
