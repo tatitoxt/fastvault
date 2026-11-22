@@ -83,7 +83,7 @@ pub enum Commands {
     /// Restore secret to previous version or from trash
     Restore {
         path: String,
-        #[arg(short, long)]
+        #[arg(short = 'V', long)]
         version: Option<u32>,
     },
     /// Manage encrypted backups
@@ -126,8 +126,37 @@ pub enum Commands {
         #[command(subcommand)]
         subcommand: AgentCommands,
     },
+    /// Synchronize the vault with a remote directory backend
+    Sync {
+        #[command(subcommand)]
+        subcommand: SyncCommands,
+    },
     /// Launch interactive Ratatui terminal UI
     Ui,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SyncCommands {
+    /// Push the current vault to a sync target directory
+    Push {
+        /// Directory the vault revisions are written to
+        target: PathBuf,
+        /// Push even when the remote has diverged from local
+        #[arg(long)]
+        force: bool,
+    },
+    /// List revisions available on a sync target
+    List { target: PathBuf },
+    /// Restore a revision from a sync target into the local vault
+    Pull {
+        /// Directory the vault revisions are read from
+        target: PathBuf,
+        /// Revision id to restore (see `sync list`); latest when omitted
+        revision: Option<String>,
+        /// Overwrite a local vault that differs from the pulled revision
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

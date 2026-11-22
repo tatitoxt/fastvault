@@ -4,10 +4,13 @@ mod commands;
 mod generator;
 
 use clap::Parser;
-use cli::{AgentCommands, BackupCommands, Cli, Commands, TemplateCommands, TotpCommands};
+use cli::{
+    AgentCommands, BackupCommands, Cli, Commands, SyncCommands, TemplateCommands, TotpCommands,
+};
 use clipboard::SecureClipboard;
 use commands::{
-    env_run::execute_env_run, prompt_password, render_secrets_table, template::render_template,
+    env_run::execute_env_run, prompt_interactive, prompt_password, render_secrets_table,
+    template::render_template,
 };
 use generator::SecretGenerator;
 
@@ -20,6 +23,7 @@ use fastvault_core::{
 };
 use fastvault_crypto::{DataEncryptionKey, KdfParams, VersionedVault};
 use fastvault_store::{BackupEngine, TrashBin, VaultStore};
+use fastvault_sync::{LocalBackend, SyncBackend, SyncEngine};
 use fastvault_tui::{run_tui, TuiApp};
 
 #[tokio::main]
@@ -127,7 +131,9 @@ async fn main() -> anyhow::Result<()> {
             let (dek, mut vault, mut secrets) = get_unlocked_vault(&store).await?;
             let val_str = match value {
                 Some(v) => v,
-                None => prompt_password(&format!("Enter secret value for {}", path))?,
+                // Not the master password: never source the secret value
+                // from FASTVAULT_PASSWORD.
+                None => prompt_interactive(&format!("Enter secret value for {}", path))?,
             };
 
             let parts: Vec<&str> = path.splitn(2, '/').collect();
@@ -297,8 +303,21 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Passwd => {
             let old_pwd = prompt_password("Enter current Master Password")?;
-            let new_pwd = prompt_password("Enter new Master Password")?;
-            let confirm = prompt_password("Confirm new Master Password")?;
+            // Read automation credentials from the environment, not argv,
+            // where process listings and shell history can expose them.
+            let new_password = std::env::var("FASTVAULT_NEW_PASSWORD")
+                .ok()
+                .filter(|password| !password.is_empty());
+            let non_interactive = new_password.is_some();
+            let new_pwd = match new_password {
+                Some(password) => password,
+                None => prompt_interactive("Enter new Master Password")?,
+            };
+            let confirm = if non_interactive {
+                new_pwd.clone()
+            } else {
+                prompt_interactive("Confirm new Master Password")?
+            };
             if new_pwd != confirm {
                 eprintln!("Error: Passwords do not match");
                 std::process::exit(1);
@@ -438,6 +457,107 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
+        Commands::Sync { subcommand } => match subcommand {
+            SyncCommands::Push { target, force } => {
+                if !store.vault_exists() {
+                    eprintln!(
+                        "Error: no vault at {:?} — run `fastvault init` first",
+                        vault_file
+                    );
+                    std::process::exit(1);
+                }
+                let device = sync_device_id(&vault_file)?;
+                let sync_store = VaultStore::new(&vault_file, &audit_file);
+                let engine = SyncEngine::new(sync_store, device);
+                let backend = LocalBackend::new(&target);
+                let result = engine.synchronize(&backend, force).await?;
+                if result.pushed {
+                    println!(
+                        "Pushed vault revision {} to {:?}",
+                        result.revision_id, target
+                    );
+                } else {
+                    println!("Already in sync (revision {})", result.revision_id);
+                }
+            }
+            SyncCommands::Pull {
+                target,
+                revision,
+                force,
+            } => {
+                let backend = LocalBackend::new(&target);
+                let revisions = backend.list_revisions().await?;
+                if revisions.is_empty() {
+                    eprintln!("Error: no revisions on {:?}", target);
+                    std::process::exit(1);
+                }
+                let meta = match &revision {
+                    Some(id) => match revisions.iter().find(|r| r.revision_id == *id) {
+                        Some(m) => m.clone(),
+                        None => {
+                            eprintln!("Error: revision {} not found on {:?}", id, target);
+                            std::process::exit(1);
+                        }
+                    },
+                    None => revisions.last().expect("non-empty").clone(),
+                };
+                let data = backend.pull_vault(&meta.revision_id).await?;
+                // The blob must parse as a vault container before it is
+                // allowed to overwrite the local file.
+                let check_dir = tempfile::tempdir()?;
+                let check_vault = check_dir.path().join("vault.fvt");
+                std::fs::write(&check_vault, &data)?;
+                if VaultStore::new(&check_vault, check_dir.path().join("audit.log"))
+                    .load_vault()
+                    .is_err()
+                {
+                    eprintln!(
+                        "Error: revision {} is not a readable vault",
+                        meta.revision_id
+                    );
+                    std::process::exit(1);
+                }
+                if vault_file.exists() {
+                    let current = std::fs::read(&vault_file)?;
+                    if current == data {
+                        println!("Local vault already at revision {}", meta.revision_id);
+                        return Ok(());
+                    }
+                    if !force {
+                        eprintln!(
+                            "Error: local vault differs from revision {} — rerun with --force to overwrite (a .pre-pull backup is kept)",
+                            meta.revision_id
+                        );
+                        std::process::exit(1);
+                    }
+                    let backup = vault_file.with_extension("pre-pull.bak");
+                    std::fs::copy(&vault_file, &backup)?;
+                    println!("Previous vault backed up to {:?}", backup);
+                }
+                VaultStore::new(&vault_file, &audit_file).save_vault_blob(&data)?;
+                println!(
+                    "Pulled revision {} ({} bytes, device {}) into {:?}",
+                    meta.revision_id, meta.payload_size, meta.device_id, vault_file
+                );
+            }
+            SyncCommands::List { target } => {
+                let backend = LocalBackend::new(&target);
+                let revisions = backend.list_revisions().await?;
+                if revisions.is_empty() {
+                    println!("No revisions on {:?}", target);
+                }
+                for rev in revisions {
+                    println!(
+                        "{} | {} | {} bytes | {}",
+                        rev.revision_id,
+                        rev.device_id,
+                        rev.payload_size,
+                        rev.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
+                }
+            }
+        },
+
         Commands::Ui => {
             let (_dek, _vault, secrets) = get_unlocked_vault(&store).await?;
             let app = TuiApp::new(secrets);
@@ -446,6 +566,55 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+// Device identity for sync: FASTVAULT_DEVICE_ID > $HOSTNAME > a random id
+// persisted next to the vault. Two machines sharing a username still sync as
+// different devices, so divergent vaults conflict instead of fast-forwarding.
+fn sync_device_id(vault_file: &std::path::Path) -> anyhow::Result<String> {
+    if let Ok(id) = std::env::var("FASTVAULT_DEVICE_ID") {
+        if !id.is_empty() {
+            return Ok(id);
+        }
+    }
+    if let Ok(h) = std::env::var("HOSTNAME") {
+        if !h.is_empty() {
+            return Ok(h);
+        }
+    }
+    // Hidden sidecar named after the vault: ".<vault>.device_id" can never be
+    // the vault itself, and we refuse to overwrite content that is not one of
+    // ours — a foreign file or undecodable bytes bail out instead.
+    let name = vault_file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("vault");
+    let dir = vault_file
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let id_file = dir.join(format!(".{name}.device_id"));
+    if id_file.exists() {
+        if let Ok(existing) = std::fs::read_to_string(&id_file) {
+            let trimmed = existing.trim();
+            if is_device_id(trimmed) {
+                return Ok(trimmed.to_string());
+            }
+        }
+        anyhow::bail!(
+            "{id_file:?} exists but is not a fastvault device id; refusing to overwrite — set FASTVAULT_DEVICE_ID"
+        );
+    }
+    let mut bytes = [0u8; 8];
+    rand::Rng::fill(&mut rand::thread_rng(), &mut bytes[..]);
+    let id = format!("device-{}", hex::encode(bytes));
+    std::fs::write(&id_file, &id).map_err(|e| {
+        anyhow::anyhow!("cannot persist device id to {id_file:?}: {e} — set FASTVAULT_DEVICE_ID")
+    })?;
+    Ok(id)
+}
+
+fn is_device_id(s: &str) -> bool {
+    s.len() == 7 + 16 && s.starts_with("device-") && s[7..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 async fn get_unlocked_vault(

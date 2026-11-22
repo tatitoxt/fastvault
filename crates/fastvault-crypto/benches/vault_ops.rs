@@ -14,7 +14,8 @@ fn benchmark_vault_operations(c: &mut Criterion) {
 
     c.bench_function("vault_creation", |b| {
         b.iter(|| {
-            VersionedVault::create_empty(black_box(pwd), params.clone()).unwrap();
+            let vault = VersionedVault::create_empty(black_box(pwd), params.clone()).unwrap();
+            black_box(vault);
         });
     });
 
@@ -31,6 +32,7 @@ fn benchmark_vault_operations(c: &mut Criterion) {
 
     c.bench_function("encrypt_1000_secrets", |b| {
         b.iter(|| {
+            // Mutates `vault` in place, so the work cannot be elided.
             vault
                 .update_secrets(black_box(&dek), black_box(&secrets))
                 .unwrap();
@@ -39,7 +41,8 @@ fn benchmark_vault_operations(c: &mut Criterion) {
 
     c.bench_function("decrypt_1000_secrets", |b| {
         b.iter(|| {
-            vault.decrypt_secrets(black_box(&dek)).unwrap();
+            let secrets = vault.decrypt_secrets(black_box(&dek)).unwrap();
+            black_box(secrets);
         });
     });
 }

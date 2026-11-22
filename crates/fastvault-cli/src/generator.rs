@@ -36,9 +36,11 @@ impl SecretGenerator {
         String::from_utf8(password).unwrap()
     }
 
+    /// Hex token of exactly `length` characters (ceil(length/2) random
+    /// bytes, truncated) so `-l` means output length like `password` mode.
     pub fn generate_token(length: usize) -> String {
-        let mut bytes = vec![0u8; length];
+        let mut bytes = vec![0u8; length.div_ceil(2)];
         rand::thread_rng().fill(&mut bytes[..]);
-        hex::encode(bytes)
+        hex::encode(bytes)[..length].to_string()
     }
 }
