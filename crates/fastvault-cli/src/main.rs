@@ -538,7 +538,7 @@ async fn main() -> anyhow::Result<()> {
                     std::fs::copy(&vault_file, &backup)?;
                     println!("Previous vault backed up to {:?}", backup);
                 }
-                std::fs::write(&vault_file, &data)?;
+                VaultStore::new(&vault_file, &audit_file).save_vault_blob(&data)?;
                 println!(
                     "Pulled revision {} ({} bytes, device {}) into {:?}",
                     meta.revision_id, meta.payload_size, meta.device_id, vault_file

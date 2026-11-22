@@ -114,6 +114,32 @@ impl VaultStore {
         Ok(())
     }
 
+    /// Atomically replaces the vault file with an already-serialized blob
+    /// (e.g. one pulled from a sync target), with the same directory and
+    /// file permissions as `save_vault`.
+    pub fn save_vault_blob(&self, data: &[u8]) -> Result<()> {
+        self.ensure_directory_permissions()?;
+
+        let parent = self.vault_path.parent().unwrap_or_else(|| Path::new("."));
+        let mut temp_file = NamedTempFile::new_in(parent)?;
+
+        temp_file.write_all(data)?;
+        temp_file.as_file().sync_all()?;
+
+        #[cfg(unix)]
+        {
+            let mut perms = temp_file.as_file().metadata()?.permissions();
+            perms.set_mode(0o600);
+            temp_file.as_file().set_permissions(perms)?;
+        }
+
+        temp_file.persist(&self.vault_path).map_err(|e| {
+            FastVaultError::VaultError(format!("Failed atomic persist of vault: {}", e))
+        })?;
+
+        Ok(())
+    }
+
     pub fn load_audit_log(&self) -> Result<AuditLog> {
         if !self.audit_path.exists() {
             let key = [0u8; 32];
