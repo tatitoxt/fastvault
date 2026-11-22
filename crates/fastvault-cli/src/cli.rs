@@ -83,7 +83,7 @@ pub enum Commands {
     /// Restore secret to previous version or from trash
     Restore {
         path: String,
-        #[arg(short, long)]
+        #[arg(short = 'V', long)]
         version: Option<u32>,
     },
     /// Manage encrypted backups
@@ -92,7 +92,12 @@ pub enum Commands {
         subcommand: BackupCommands,
     },
     /// Rotate master password or key material
-    Passwd,
+    Passwd {
+        #[arg(long)]
+        old_password: Option<String>,
+        #[arg(long)]
+        new_password: Option<String>,
+    },
     /// Inspect audit trail
     Audit {
         #[arg(long)]

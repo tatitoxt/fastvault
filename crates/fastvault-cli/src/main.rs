@@ -295,10 +295,24 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Passwd => {
-            let old_pwd = prompt_password("Enter current Master Password")?;
-            let new_pwd = prompt_password("Enter new Master Password")?;
-            let confirm = prompt_password("Confirm new Master Password")?;
+        Commands::Passwd {
+            old_password,
+            new_password,
+        } => {
+            let old_pwd = match old_password {
+                Some(p) => p,
+                None => prompt_password("Enter current Master Password")?,
+            };
+            let non_interactive = new_password.is_some();
+            let new_pwd = match new_password {
+                Some(p) => p,
+                None => prompt_password("Enter new Master Password")?,
+            };
+            let confirm = if non_interactive {
+                new_pwd.clone()
+            } else {
+                prompt_password("Confirm new Master Password")?
+            };
             if new_pwd != confirm {
                 eprintln!("Error: Passwords do not match");
                 std::process::exit(1);

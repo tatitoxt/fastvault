@@ -5,7 +5,15 @@ use comfy_table::{Cell, Color, Table};
 use fastvault_core::error::{FastVaultError, Result};
 use fastvault_core::secret::Secret;
 
+/// Read a password interactively, or from the `FASTVAULT_PASSWORD`
+/// environment variable when set (automation, CI and tests). The env var is
+/// a fallback for pipelines — it never reaches the vault file or audit log.
 pub fn prompt_password(prompt: &str) -> Result<String> {
+    if let Ok(pwd) = std::env::var("FASTVAULT_PASSWORD") {
+        if !pwd.is_empty() {
+            return Ok(pwd);
+        }
+    }
     dialoguer::Password::new()
         .with_prompt(prompt)
         .interact()
