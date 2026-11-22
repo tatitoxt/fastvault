@@ -32,11 +32,10 @@ fn benchmark_vault_operations(c: &mut Criterion) {
 
     c.bench_function("encrypt_1000_secrets", |b| {
         b.iter(|| {
-            black_box(
-                vault
-                    .update_secrets(black_box(&dek), black_box(&secrets))
-                    .unwrap(),
-            );
+            // Mutates `vault` in place, so the work cannot be elided.
+            vault
+                .update_secrets(black_box(&dek), black_box(&secrets))
+                .unwrap();
         });
     });
 
