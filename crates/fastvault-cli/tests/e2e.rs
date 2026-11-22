@@ -277,3 +277,40 @@ fn get_missing_secret_is_an_error_not_a_crash() {
     let err = v.fail(&["get", "ghost/path", "--reveal"]);
     assert!(!err.is_empty());
 }
+
+#[test]
+fn set_without_value_does_not_store_master_password() {
+    // With FASTVAULT_PASSWORD set, `set` without a value must prompt
+    // interactively (and fail without a TTY) — never silently store the
+    // master password as the secret value.
+    let v = Vault::new();
+    init(&v);
+    v.fail(&["set", "should/not-exist"]);
+    v.fail(&["get", "should/not-exist", "--reveal"]);
+}
+
+#[test]
+fn run_child_does_not_inherit_fastvault_password() {
+    let v = Vault::new();
+    init(&v);
+    let out = v.ok(&[
+        "run",
+        "--",
+        "sh",
+        "-c",
+        "if [ -n \"$FASTVAULT_PASSWORD\" ]; then echo LEAKED; else echo CLEAN; fi",
+    ]);
+    assert_eq!(out.trim(), "CLEAN");
+}
+
+#[test]
+fn passwd_without_new_password_needs_interaction() {
+    // FASTVAULT_PASSWORD authenticates, but the NEW password must come from
+    // --new-password or an interactive prompt — not silently reuse the env.
+    let v = Vault::new();
+    init(&v);
+    v.fail(&["passwd", "--old-password", PASSWORD]);
+    // The old password still works (no no-op "rotation" happened).
+    let out = v.ok(&["status"]);
+    assert!(out.contains("Vault Exists: true"));
+}

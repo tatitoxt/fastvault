@@ -8,12 +8,25 @@ use fastvault_core::secret::Secret;
 /// Read a password interactively, or from the `FASTVAULT_PASSWORD`
 /// environment variable when set (automation, CI and tests). The env var is
 /// a fallback for pipelines — it never reaches the vault file or audit log.
+///
+/// Only use this for the *current* master password. Prompts for anything
+/// else (a new password, a secret value) must use [`prompt_interactive`] so
+/// the master password can't leak into stored secrets.
 pub fn prompt_password(prompt: &str) -> Result<String> {
     if let Ok(pwd) = std::env::var("FASTVAULT_PASSWORD") {
         if !pwd.is_empty() {
             return Ok(pwd);
         }
     }
+    dialoguer::Password::new()
+        .with_prompt(prompt)
+        .interact()
+        .map_err(|e| FastVaultError::VaultError(e.to_string()))
+}
+
+/// Interactive-only prompt: never reads `FASTVAULT_PASSWORD`. Use for new
+/// passwords and secret values, which are not the current master password.
+pub fn prompt_interactive(prompt: &str) -> Result<String> {
     dialoguer::Password::new()
         .with_prompt(prompt)
         .interact()

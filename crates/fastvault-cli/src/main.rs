@@ -7,7 +7,8 @@ use clap::Parser;
 use cli::{AgentCommands, BackupCommands, Cli, Commands, TemplateCommands, TotpCommands};
 use clipboard::SecureClipboard;
 use commands::{
-    env_run::execute_env_run, prompt_password, render_secrets_table, template::render_template,
+    env_run::execute_env_run, prompt_interactive, prompt_password, render_secrets_table,
+    template::render_template,
 };
 use generator::SecretGenerator;
 
@@ -127,7 +128,9 @@ async fn main() -> anyhow::Result<()> {
             let (dek, mut vault, mut secrets) = get_unlocked_vault(&store).await?;
             let val_str = match value {
                 Some(v) => v,
-                None => prompt_password(&format!("Enter secret value for {}", path))?,
+                // Not the master password: never source the secret value
+                // from FASTVAULT_PASSWORD.
+                None => prompt_interactive(&format!("Enter secret value for {}", path))?,
             };
 
             let parts: Vec<&str> = path.splitn(2, '/').collect();
@@ -306,12 +309,15 @@ async fn main() -> anyhow::Result<()> {
             let non_interactive = new_password.is_some();
             let new_pwd = match new_password {
                 Some(p) => p,
-                None => prompt_password("Enter new Master Password")?,
+                // The new password must not come from FASTVAULT_PASSWORD —
+                // that env var holds the *current* master password, and
+                // rotating to it silently would be a no-op.
+                None => prompt_interactive("Enter new Master Password")?,
             };
             let confirm = if non_interactive {
                 new_pwd.clone()
             } else {
-                prompt_password("Confirm new Master Password")?
+                prompt_interactive("Confirm new Master Password")?
             };
             if new_pwd != confirm {
                 eprintln!("Error: Passwords do not match");
