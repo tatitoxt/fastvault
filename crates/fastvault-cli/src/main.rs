@@ -484,6 +484,66 @@ async fn main() -> anyhow::Result<()> {
                     println!("Already in sync (revision {})", result.revision_id);
                 }
             }
+            SyncCommands::Pull {
+                target,
+                revision,
+                force,
+            } => {
+                let backend = LocalBackend::new(&target);
+                let revisions = backend.list_revisions().await?;
+                if revisions.is_empty() {
+                    eprintln!("Error: no revisions on {:?}", target);
+                    std::process::exit(1);
+                }
+                let meta = match &revision {
+                    Some(id) => match revisions.iter().find(|r| r.revision_id == *id) {
+                        Some(m) => m.clone(),
+                        None => {
+                            eprintln!("Error: revision {} not found on {:?}", id, target);
+                            std::process::exit(1);
+                        }
+                    },
+                    None => revisions.last().expect("non-empty").clone(),
+                };
+                let data = backend.pull_vault(&meta.revision_id).await?;
+                // The blob must parse as a vault container before it is
+                // allowed to overwrite the local file.
+                let check_dir = tempfile::tempdir()?;
+                let check_vault = check_dir.path().join("vault.fvt");
+                std::fs::write(&check_vault, &data)?;
+                if VaultStore::new(&check_vault, check_dir.path().join("audit.log"))
+                    .load_vault()
+                    .is_err()
+                {
+                    eprintln!(
+                        "Error: revision {} is not a readable vault",
+                        meta.revision_id
+                    );
+                    std::process::exit(1);
+                }
+                if vault_file.exists() {
+                    let current = std::fs::read(&vault_file)?;
+                    if current == data {
+                        println!("Local vault already at revision {}", meta.revision_id);
+                        return Ok(());
+                    }
+                    if !force {
+                        eprintln!(
+                            "Error: local vault differs from revision {} — rerun with --force to overwrite (a .pre-pull backup is kept)",
+                            meta.revision_id
+                        );
+                        std::process::exit(1);
+                    }
+                    let backup = vault_file.with_extension("pre-pull.bak");
+                    std::fs::copy(&vault_file, &backup)?;
+                    println!("Previous vault backed up to {:?}", backup);
+                }
+                std::fs::write(&vault_file, &data)?;
+                println!(
+                    "Pulled revision {} ({} bytes, device {}) into {:?}",
+                    meta.revision_id, meta.payload_size, meta.device_id, vault_file
+                );
+            }
             SyncCommands::List { target } => {
                 let backend = LocalBackend::new(&target);
                 let revisions = backend.list_revisions().await?;

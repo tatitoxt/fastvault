@@ -36,6 +36,4 @@ regex.workspace = true
 zeroize.workspace = true
 rand.workspace = true
 hex.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

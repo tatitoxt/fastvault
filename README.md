@@ -31,8 +31,10 @@ cargo run -p fastvault-cli -- --help
 - **Directory sync** — `fastvault sync push <dir>` copies the encrypted
   vault blob to a target directory (a mounted share, an `rsync` source,
   a git remote) as a content-hashed revision; re-push is a no-op when
-  nothing changed, divergence without `--force` is refused, and
-  `sync list` shows the remote's revision history
+  nothing changed, divergence without `--force` is refused,
+  `sync list` shows the remote's revision history, and `sync pull`
+  restores a revision into the local vault (parsed before overwriting,
+  `.pre-pull` backup kept on `--force` overwrites)
 - **Generators** — passwords and hex tokens with length control
 - **TUI** — `fastvault ui` for browsing and editing interactively
 

@@ -346,6 +346,47 @@ fn sync_pushes_vault_and_reports_revisions() {
 }
 
 #[test]
+fn sync_pull_restores_a_pushed_revision() {
+    // A pushes a vault holding a secret; B pulls it into an empty vault.
+    let a = Vault::new();
+    init(&a);
+    a.ok(&["set", "api/key", "abc123"]);
+    let remote = a.file("remote");
+    let remote_str = remote.to_str().unwrap();
+    a.ok(&["sync", "push", remote_str]);
+
+    let b = Vault::new();
+    let out = b.ok(&["sync", "pull", remote_str]);
+    assert!(out.contains("Pulled revision"), "pull: {out}");
+    let out = b.ok(&["get", "api/key", "-r"]);
+    assert!(out.contains("abc123"), "secret after pull: {out}");
+
+    // Pulling the same bytes again is a no-op, not a force error.
+    let out = b.ok(&["sync", "pull", remote_str]);
+    assert!(out.contains("already at revision"), "re-pull: {out}");
+
+    // A divergent local vault needs --force and keeps a .pre-pull backup.
+    b.ok(&["set", "api/other", "zzz"]);
+    let err = b.fail(&["sync", "pull", remote_str]);
+    assert!(err.contains("--force"), "force hint: {err}");
+    let out = b.ok(&["sync", "pull", remote_str, "--force"]);
+    assert!(out.contains("backed up"), "backup note: {out}");
+    assert!(
+        b.file("vault.pre-pull.bak").exists(),
+        "pre-pull backup kept"
+    );
+    let out = b.ok(&["list"]);
+    assert!(!out.contains("api/other"), "local change replaced: {out}");
+
+    // Pulling a missing revision and from an empty remote fail cleanly.
+    let err = b.fail(&["sync", "pull", remote_str, "deadbeef"]);
+    assert!(err.contains("not found"), "missing revision: {err}");
+    let empty = b.file("empty-remote");
+    let err = b.fail(&["sync", "pull", empty.to_str().unwrap()]);
+    assert!(err.contains("no revisions"), "empty remote: {err}");
+}
+
+#[test]
 fn sync_push_without_vault_fails_cleanly() {
     let v = Vault::new();
     let remote = v.file("remote");

@@ -152,6 +152,16 @@ pub enum SyncCommands {
     },
     /// List revisions available on a sync target
     List { target: PathBuf },
+    /// Restore a revision from a sync target into the local vault
+    Pull {
+        /// Directory the vault revisions are read from
+        target: PathBuf,
+        /// Revision id to restore (see `sync list`); latest when omitted
+        revision: Option<String>,
+        /// Overwrite a local vault that differs from the pulled revision
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
