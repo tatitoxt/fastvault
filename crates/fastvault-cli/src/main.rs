@@ -470,9 +470,7 @@ async fn main() -> anyhow::Result<()> {
                     );
                     std::process::exit(1);
                 }
-                let device = std::env::var("HOSTNAME")
-                    .or_else(|_| std::env::var("USER"))
-                    .unwrap_or_else(|_| "fastvault-device".to_string());
+                let device = sync_device_id(&vault_file);
                 let sync_store = VaultStore::new(&vault_file, &audit_file);
                 let engine = SyncEngine::new(sync_store, device);
                 let backend = LocalBackend::new(&target);
@@ -512,6 +510,35 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+// Device identity for sync: FASTVAULT_DEVICE_ID > $HOSTNAME > a random id
+// persisted next to the vault. Two machines sharing a username still sync as
+// different devices, so divergent vaults conflict instead of fast-forwarding.
+fn sync_device_id(vault_file: &std::path::Path) -> String {
+    if let Ok(id) = std::env::var("FASTVAULT_DEVICE_ID") {
+        if !id.is_empty() {
+            return id;
+        }
+    }
+    if let Ok(h) = std::env::var("HOSTNAME") {
+        if !h.is_empty() {
+            return h;
+        }
+    }
+    let dir = vault_file.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let id_file = dir.join("device_id");
+    if let Ok(existing) = std::fs::read_to_string(&id_file) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    let mut bytes = [0u8; 8];
+    rand::Rng::fill(&mut rand::thread_rng(), &mut bytes[..]);
+    let id = format!("device-{}", hex::encode(bytes));
+    let _ = std::fs::write(&id_file, &id);
+    id
 }
 
 async fn get_unlocked_vault(
